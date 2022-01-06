@@ -16,19 +16,26 @@ from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
 
 
-def single_gpu_test(model, data_loader, show=False):
+def single_gpu_test(model, data_loader, show=False, out_dir = None):
     model.eval()
+    #show  = True
+    #import pdb;pdb.set_trace()
     results = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
+        img_metas = data['img_meta'][0].data[0][0]
         with torch.no_grad():
             result = model(return_loss=False, rescale=not show, **data)
         results.append(result)
 
-        if show:
+        if show or out_dir:
+            if out_dir:
+                out_file = osp.join(out_dir, img_metas['filename'].split('/')[-1])
+            else:
+                out_file = None
             # model.module.show_result(data, result)
-            model.module.show_result(data, result, score_thr=0.21)
+            model.module.show_result(data, result, score_thr=0.21, show=show,out_file=out_file)
 
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):
@@ -117,6 +124,8 @@ def parse_args():
         choices=['proposal', 'proposal_fast', 'bbox', 'segm', 'keypoints'],
         help='eval types')
     parser.add_argument('--show', action='store_true', help='show results')
+    parser.add_argument(
+        '--show-dir', help='directory where painted images will be saved')    
     parser.add_argument('--tmpdir', help='tmp dir for writing some results')
     parser.add_argument(
         '--launcher',
@@ -133,9 +142,9 @@ def parse_args():
 def main():
     args = parse_args()
 
-    assert args.out or args.show or args.json_out, \
+    assert args.out or args.show or args.json_out or args.show_dir, \
         ('Please specify at least one operation (save or show the results) '
-         'with the argument "--out" or "--show" or "--json_out"')
+         'with the argument "--out" or "--show" or "--json_out" or "--show-dir"')
 
     if args.out is not None and not args.out.endswith(('.pkl', '.pickle')):
         raise ValueError('The output file must be a pkl file.')
@@ -193,7 +202,8 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show)
+
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir)
     else:
         model = MMDistributedDataParallel(model.cuda())
         outputs = multi_gpu_test(model, data_loader, args.tmpdir)

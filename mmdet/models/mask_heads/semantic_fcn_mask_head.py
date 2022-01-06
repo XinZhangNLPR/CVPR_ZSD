@@ -263,6 +263,7 @@ class SemanticFCNMaskHead(nn.Module):
         Returns:
             list[list]: encoded masks
         """
+        #import pdb;pdb.set_trace()
         if isinstance(mask_pred, torch.Tensor):
             mask_pred = mask_pred.sigmoid().cpu().numpy()
         assert isinstance(mask_pred, np.ndarray)

@@ -118,7 +118,8 @@ class BaseDetector(nn.Module):
         else:
             return self.forward_test(img, img_meta, **kwargs)
 
-    def show_result(self, data, result, dataset=None, score_thr=0.3):
+    def show_result(self, data, result, dataset=None, score_thr=0.3,show = False,out_file=None):
+        
         if isinstance(result, tuple):
             bbox_result, segm_result = result
         else:
@@ -146,25 +147,27 @@ class BaseDetector(nn.Module):
 
             bboxes = np.vstack(bbox_result)
             # draw segmentation masks
-            if segm_result is not None:
-                segms = mmcv.concat_list(segm_result)
-                inds = np.where(bboxes[:, -1] > score_thr)[0]
-                for i in inds:
-                    color_mask = np.random.randint(
-                        0, 256, (1, 3), dtype=np.uint8)
-                    mask = maskUtils.decode(segms[i]).astype(np.bool)
-                    img_show[mask] = img_show[mask] * 0.5 + color_mask * 0.5
+            # if segm_result is not None:
+            #     segms = mmcv.concat_list(segm_result)
+            #     inds = np.where(bboxes[:, -1] > score_thr)[0]
+            #     for i in inds:
+            #         color_mask = np.random.randint(
+            #             0, 256, (1, 3), dtype=np.uint8)
+            #         mask = maskUtils.decode(segms[i]).astype(np.bool)
+            #         img_show[mask] = img_show[mask] * 0.5 + color_mask * 0.5
             # draw bounding boxes
             labels = [
                 np.full(bbox.shape[0], i, dtype=np.int32)
                 for i, bbox in enumerate(bbox_result)
             ]
             labels = np.concatenate(labels)
-            print(bboxes)
-            print(labels)
+            #print(bboxes)
+            #print(labels)
+            #import pdb;pdb.set_trace()
             mmcv.imshow_det_bboxes(
                 img_show,
                 bboxes,
                 labels,
                 class_names=class_names,
-                score_thr=score_thr)
+                score_thr=score_thr,
+                out_file=out_file)

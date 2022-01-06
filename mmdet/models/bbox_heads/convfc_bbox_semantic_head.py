@@ -96,10 +96,15 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                            self.num_classes)
             self.fc_reg = nn.Linear(self.num_classes, out_dim_reg)
 
+
         if self.with_reg and not self.reg_with_semantic:
             out_dim_reg = (4 if self.reg_class_agnostic else 4 *
                            self.num_classes)
-            self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
+            if self.reg_ag_to_cs:
+                self.fc_ag_to_cs = nn.Linear(semantic_dims, 4*(self.reg_last_dim+1))
+            else:
+                self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
+
 
         self.fc_res = nn.Linear(self.vec.shape[0], self.vec.shape[0])
         # self.fc_res = nn.Linear(self.semantic_last_dim, self.vec.shape[0])
@@ -155,6 +160,7 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
 
     def forward(self, x, res_feats=None, context_feats=None, return_feats=False, resturn_center_feats=False, bg_vector=None):
         # shared part
+        #import pdb;pdb.set_trace()
         if self.num_shared_convs > 0:
             for conv in self.shared_convs:
                 x = conv(x)
@@ -210,6 +216,10 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     d_semantic_feature = torch.mm(d_semantic_score, self.voc.t())
                     d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
 
+                if self.reg_ag_to_cs:
+                    #import pdb;pdb.set_trace()
+                    vis_feature = semantic_score.detach()
+                    cs_fc_parameter = self.fc_ag_to_cs(vis_feature)
                 semantic_score = torch.mm(semantic_score, self.vec)
             else:
                 semantic_score = self.kernel_semantic(self.vec)
@@ -218,7 +228,13 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
         else:
             semantic_score = None
         if self.with_reg and not self.reg_with_semantic:
-            bbox_pred = self.fc_reg(x_reg)
+            if self.reg_ag_to_cs:
+                #import pdb;pdb.set_trace()
+                weight = cs_fc_parameter[:,:4*self.reg_last_dim].reshape(-1,4,self.reg_last_dim)
+                bias = cs_fc_parameter[:,-4:]
+                bbox_pred = torch.bmm(weight,x_reg.unsqueeze(-1)).squeeze(-1) + bias                
+            else:
+                bbox_pred = self.fc_reg(x_reg)
         elif self.with_reg and self.reg_with_semantic:
             semantic_reg_feature = self.fc_reg_sem(x_reg)
             if not self.share_semantic:

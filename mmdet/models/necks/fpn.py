@@ -101,7 +101,7 @@ class FPN(nn.Module):
     @auto_fp16()
     def forward(self, inputs):
         assert len(inputs) == len(self.in_channels)
-
+        #import pdb;pdb.set_trace()
         # build laterals
         laterals = [
             lateral_conv(inputs[i + self.start_level])

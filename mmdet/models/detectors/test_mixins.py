@@ -1,6 +1,6 @@
 from mmdet.core import (bbox2roi, bbox_mapping, merge_aug_bboxes,
                         merge_aug_masks, merge_aug_proposals, multiclass_nms)
-
+import torch
 
 class RPNTestMixin(object):
 

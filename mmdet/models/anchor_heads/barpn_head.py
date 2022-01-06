@@ -40,6 +40,7 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
         x = self.rpn_conv(x)
         x = F.relu(x, inplace=True)
         # B C(900) W H
+        # import pdb;pdb.set_trace()
         rpn_cls_score = self.rpn_cls_conv_T(x)
         if self.voc:
             rpn_cls_score = self.voc_conv(rpn_cls_score)

@@ -38,6 +38,7 @@ class BBoxSemanticHead(nn.Module):
                  target_means=[0., 0., 0., 0.],
                  target_stds=[0.1, 0.1, 0.2, 0.2],
                  reg_class_agnostic=False,
+                 reg_ag_to_cs = False,
                  loss_bbox=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  loss_semantic=dict(
@@ -62,6 +63,7 @@ class BBoxSemanticHead(nn.Module):
         self.target_means = target_means
         self.target_stds = target_stds
         self.reg_class_agnostic = reg_class_agnostic
+        self.reg_ag_to_cs = reg_ag_to_cs
         self.fp16_enabled = False
         self.use_lsoftmax = use_lsoftmax
         self.with_decoder = with_decoder
@@ -76,10 +78,12 @@ class BBoxSemanticHead(nn.Module):
             self.avg_pool = nn.AvgPool2d(self.roi_feat_size)
         else:
             in_channels *= self.roi_feat_area
+        #import pdb;pdb.set_trace()
 
         if self.with_reg:
             out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
-            self.fc_reg = nn.Linear(in_channels, out_dim_reg)
+            if not self.reg_ag_to_cs:
+                self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         if self.with_semantic:
             self.fc_semantic = nn.Linear(self.in_channels, semantic_dims)
             # voc = np.loadtxt('MSCOCO/vocabulary_w2v.txt', dtype='float32', delimiter=',')
@@ -115,8 +119,9 @@ class BBoxSemanticHead(nn.Module):
 
     def init_weights(self):
         if self.with_reg:
-            nn.init.normal_(self.fc_reg.weight, 0, 0.001)
-            nn.init.constant_(self.fc_reg.bias, 0)
+            if not self.reg_ag_to_cs:
+                nn.init.normal_(self.fc_reg.weight, 0, 0.001)
+                nn.init.constant_(self.fc_reg.bias, 0)
         if self.with_semantic:
             nn.init.normal_(self.fc_semantic.weight, 0, 0.001)
             nn.init.constant_(self.fc_semantic.bias, 0)
