@@ -39,6 +39,10 @@ class BBoxSemanticHead(nn.Module):
                  target_stds=[0.1, 0.1, 0.2, 0.2],
                  reg_class_agnostic=False,
                  reg_ag_to_cs = False,
+                 reg_relu = False,
+                 reg_bn_relu = False,
+                 reg_bn_tanh = False,
+                 reg_bn_sigmoid = False,
                  loss_bbox=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  loss_semantic=dict(
@@ -62,8 +66,15 @@ class BBoxSemanticHead(nn.Module):
         self.num_classes = num_classes
         self.target_means = target_means
         self.target_stds = target_stds
+        
         self.reg_class_agnostic = reg_class_agnostic
         self.reg_ag_to_cs = reg_ag_to_cs
+        self.reg_relu = reg_relu
+        self.reg_bn_relu = reg_bn_relu 
+        self.reg_bn_tanh =  reg_bn_tanh 
+        self.reg_bn_sigmoid = reg_bn_sigmoid 
+
+
         self.fp16_enabled = False
         self.use_lsoftmax = use_lsoftmax
         self.with_decoder = with_decoder

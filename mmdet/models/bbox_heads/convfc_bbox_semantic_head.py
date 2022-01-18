@@ -74,6 +74,9 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                 self.reg_last_dim *= self.roi_feat_area
 
         self.relu = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
+        self.bn = nn.BatchNorm1d(4*(self.reg_last_dim+1))
         # reconstruct fc_semantic and fc_reg since input channels are changed
         if self.with_semantic:
             self.fc_semantic = nn.Linear(self.semantic_last_dim, semantic_dims)
@@ -218,8 +221,17 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
 
                 if self.reg_ag_to_cs:
                     #import pdb;pdb.set_trace()
-                    vis_feature = semantic_score.detach()
+                    vis_feature = semantic_score
                     cs_fc_parameter = self.fc_ag_to_cs(vis_feature)
+                    if self.reg_relu:
+                        cs_fc_parameter = self.relu(cs_fc_parameter)
+                    if self.reg_bn_relu:
+                        cs_fc_parameter = self.relu(self.bn(cs_fc_parameter))
+                    if self.reg_bn_tanh:
+                        cs_fc_parameter = self.tanh(self.bn(cs_fc_parameter))
+                    if self.reg_bn_sigmoid:
+                        cs_fc_parameter = 2*(self.sigmoid(self.bn(cs_fc_parameter))-0.5)
+
                 semantic_score = torch.mm(semantic_score, self.vec)
             else:
                 semantic_score = self.kernel_semantic(self.vec)
@@ -227,6 +239,7 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                 semantic_score = torch.mm(semantic_feature, semantic_score)
         else:
             semantic_score = None
+        # import pdb;pdb.set_trace()
         if self.with_reg and not self.reg_with_semantic:
             if self.reg_ag_to_cs:
                 #import pdb;pdb.set_trace()

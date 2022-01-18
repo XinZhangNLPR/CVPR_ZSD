@@ -43,7 +43,7 @@ model = dict(
         roi_feat_size=7,
         num_classes=49,
         semantic_dims=300,
-        seen_class=True,
+        seen_class=False,
         reg_with_semantic=False,
         share_semantic=False,
         with_decoder=True,
@@ -54,6 +54,7 @@ model = dict(
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=True,
         reg_ag_to_cs = True,
+        reg_relu = True,
         loss_semantic=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
@@ -71,7 +72,7 @@ model = dict(
         num_classes=49,
         gzsd=False,
         semantic_dims=300,
-        seen_class=True,
+        seen_class=False,
         share_semantic=False,
         voc_path=None,
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
@@ -139,7 +140,6 @@ test_cfg = dict(
         max_per_img=100,
         mask_thr_binary=0.5))
 # dataset settings
-# dataset_type = 'CocoDatasetSeen48'
 dataset_type = 'CocoDatasetUnseen17'
 data_root = 'data/coco/'
 img_norm_cfg = dict(
@@ -211,7 +211,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/cszsi_wodetach/48_17'
+work_dir = './work_dirs/zsi/48_17/'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
