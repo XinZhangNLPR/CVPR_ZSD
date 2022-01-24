@@ -52,9 +52,10 @@ model = dict(
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
-        reg_class_agnostic=False,
-        loss_rank=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+        reg_class_agnostic=True,
+        reg_ag_to_cs = True,
+        reg_double_fc = True,
+        reg_bn_sigmoid = True,
         loss_semantic=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
@@ -211,7 +212,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/zsi/listmle_rank_zsi/'
+work_dir = './work_dirs/zsi/48_17/'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

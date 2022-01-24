@@ -104,7 +104,11 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
             out_dim_reg = (4 if self.reg_class_agnostic else 4 *
                            self.num_classes)
             if self.reg_ag_to_cs:
-                self.fc_ag_to_cs = nn.Linear(semantic_dims, 4*(self.reg_last_dim+1))
+                if self.reg_double_fc:
+                    self.fc_ag_to_cs = nn.ModuleList([nn.Linear(semantic_dims, 100),nn.BatchNorm1d(100),
+                        self.relu,nn.Linear(100, 4*(self.reg_last_dim+1))])
+                else:             
+                    self.fc_ag_to_cs = nn.ModuleList([nn.Linear(semantic_dims, 4*(self.reg_last_dim+1))])
             else:
                 self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
 
@@ -220,9 +224,12 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
 
                 if self.reg_ag_to_cs:
-                    #import pdb;pdb.set_trace()
-                    vis_feature = semantic_score
-                    cs_fc_parameter = self.fc_ag_to_cs(vis_feature)
+                    # import pdb;pdb.set_trace()
+                    cs_fc_parameter = semantic_score
+
+                    for layer in self.fc_ag_to_cs:
+                        #import pdb;pdb.set_trace()
+                        cs_fc_parameter = layer(cs_fc_parameter)
                     if self.reg_relu:
                         cs_fc_parameter = self.relu(cs_fc_parameter)
                     if self.reg_bn_relu:
