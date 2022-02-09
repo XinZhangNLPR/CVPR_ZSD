@@ -25,7 +25,7 @@ model = dict(
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
         voc_path=None,
-        vec_path='data/coco/word_w2v_withbg_48_17.txt',
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
         sync_bg=True,
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
@@ -41,21 +41,21 @@ model = dict(
         in_channels=256,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=49,
+        num_classes=66,
         semantic_dims=300,
         seen_class=False,
         reg_with_semantic=False,
         share_semantic=False,
         with_decoder=True,
         sync_bg=True,
-        gzsd=True,
         voc_path='data/coco/vocabulary_w2v.txt',
-        vec_path='data/coco/word_w2v_withbg_48_17.txt',
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
-        reg_class_agnostic=False,
-        loss_rank=dict(
-            type='ListMLELoss', loss_weight=0.01),
+        reg_class_agnostic=True,
+        reg_ag_to_cs = True,
+        reg_double_fc = True,
+        reg_bn_sigmoid = True,
         loss_semantic=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
@@ -69,14 +69,14 @@ model = dict(
         num_convs=4,
         in_channels=256,
         conv_out_channels=256,
-        num_classes=49,
-        gzsd=True,
+        num_classes=66,
+        gzsd=False,
         semantic_dims=300,
         seen_class=False,
         sync_bg=True,
         share_semantic=False,
         voc_path=None,
-        vec_path='data/coco/word_w2v_withbg_48_17.txt',
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
         with_learnable_kernel=True,
         with_decoder=True,
         loss_mask=dict(
@@ -85,8 +85,7 @@ model = dict(
     mask_with_decoder=True,
     bbox_with_decoder=True,
     bbox_sync_bg=True,
-    mask_sync_bg=True,
-    gzsd_mode=True)
+    mask_sync_bg=True)
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
@@ -142,7 +141,7 @@ test_cfg = dict(
         max_per_img=100,
         mask_thr_binary=0.5))
 # dataset settings
-dataset_type = 'CocoDataset_48_17'
+dataset_type = 'CocoDatasetUnseen15'
 data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -176,27 +175,27 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2014_seen_48_17.json',
+        ann_file=data_root + 'annotations/instances_train2014_seen_65_15.json',
         img_prefix=data_root + 'train2014/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2014_seen_48_17.json',
+        ann_file=data_root + 'annotations/instances_val2014_seen_65_15.json',
         img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2014_gzsi_48_17.json',
+        ann_file=data_root + 'annotations/instances_val2014_unseen_65_15.json',
         img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline))
 # optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0075, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=1000,
+    warmup_iters=7000,
     warmup_ratio=1.0 / 3,
     step=[8, 11])
 checkpoint_config = dict(interval=12)
@@ -213,7 +212,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/listmle_rank_zsi/48_17/'
+work_dir = './work_dirs/zsi/65_15/'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
