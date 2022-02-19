@@ -44,6 +44,11 @@ class BBoxSemanticHead(nn.Module):
                  reg_bn_tanh = False,
                  reg_bn_sigmoid = False,
                  reg_double_fc = False,
+                 reg_sigmoid_scaling = False,
+                 reg_sigmoid_scaling2 = False,
+                 reg_sigmoid_temp = 0,
+                 reg_sigmoid_temp_if_learn = False,
+                 res_connect = False,
                  loss_rank = None,
                  loss_bbox=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
@@ -76,7 +81,12 @@ class BBoxSemanticHead(nn.Module):
         self.reg_bn_tanh =  reg_bn_tanh 
         self.reg_bn_sigmoid = reg_bn_sigmoid 
         self.reg_double_fc = reg_double_fc
+        self.reg_sigmoid_scaling = reg_sigmoid_scaling
+        self.reg_sigmoid_scaling2 = reg_sigmoid_scaling2
+        self.reg_sigmoid_temp = reg_sigmoid_temp
+        self.reg_sigmoid_temp_if_learn = reg_sigmoid_temp_if_learn
 
+        self.res_connect = res_connect
 
         self.fp16_enabled = False
         self.use_lsoftmax = use_lsoftmax
@@ -133,9 +143,10 @@ class BBoxSemanticHead(nn.Module):
         self.loss_ed = build_loss(loss_ed)
         if loss_rank:
             self.loss_rank = build_loss(loss_rank)
-            self.CR = self.class_rank()
+            self.CR = self.all_class_rank_voc()
         else:
             self.loss_rank = None
+        
 
     def init_weights(self):
         if self.with_reg:
@@ -184,11 +195,31 @@ class BBoxSemanticHead(nn.Module):
 
     def class_rank(self):
         #self.vec: [300,49]
+        import pdb;pdb.set_trace()
         fg_vec = self.vec[:,1:]
         sim = torch.mm(fg_vec.t(),fg_vec)
         _, CR = torch.sort(sim,descending=True,dim=1)
         return CR
 
+    def all_class_rank(self):
+        #self.vec: [300,49]
+        #import pdb;pdb.set_trace()
+        fg_vec = torch.cat((self.vec[:,1:],self.vec_unseen[:,1:]),1)
+        sim = torch.mm(fg_vec.t(),fg_vec)
+        CR = torch.sort(sim,descending=True,dim=1)
+        return CR
+
+    def all_class_rank_voc(self):
+        #self.vec: [300,49]
+        #import pdb;pdb.set_trace()
+        self.kernel_semantic.cuda()
+        fg_vec = torch.cat((self.vec[:,1:],self.vec_unseen[:,1:]),1)
+        fg_vec_voc = torch.mm(fg_vec.t(),self.voc)
+        fg_vec_voc = self.kernel_semantic(fg_vec_voc)
+        fg_vec_voc = torch.mm(fg_vec_voc, fg_vec)
+        #sim = torch.mm(fg_vec_voc.t(),fg_vec)
+        CR = torch.sort(fg_vec_voc,descending=True,dim=1)
+        return CR
 
     @force_fp32(apply_to=('semantic_score', 'bbox_pred'))
     def loss(self,
@@ -202,14 +233,14 @@ class BBoxSemanticHead(nn.Module):
              d_feature=None,
              reduction_override=None):
         losses = dict()
+        import pdb;pdb.set_trace()
         
         if self.loss_rank:
             #import pdb;pdb.set_trace()
-            fg_semantic_score = semantic_score[labels!=0]
-            fg_labels = labels[labels!=0]-1
-            true_rank = torch.index_select(self.CR,0,fg_labels)            
-
-            losses['loss_rank'] = self.loss_rank(fg_semantic_score, true_rank)
+            # fg_semantic_score = semantic_score[labels!=0]
+            # fg_labels = labels[labels!=0]-1
+            # true_rank = torch.index_select(self.CR,0,fg_labels)            
+            losses['loss_rank'] = self.loss_rank(semantic_score, labels, self.CR, self.vec, self.vec_unseen)
         if semantic_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
             losses['loss_semantic'] = self.loss_semantic(

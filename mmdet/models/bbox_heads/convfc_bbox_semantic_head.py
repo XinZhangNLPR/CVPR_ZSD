@@ -112,6 +112,26 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
             else:
                 self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
 
+            if self.res_connect:
+                self.shortcut =  nn.Sequential(nn.Linear(semantic_dims, semantic_dims),self.relu)
+                
+
+
+
+
+
+        if self.reg_sigmoid_scaling:
+            self.temp = torch.nn.Parameter(torch.tensor([10.0]), requires_grad=True)
+            self.scale = torch.nn.Parameter(torch.tensor([2.0]), requires_grad=True)
+        if self.reg_sigmoid_scaling2:
+            self.temp = torch.nn.Parameter(torch.tensor([5.0]), requires_grad=True)
+            self.scale = torch.nn.Parameter(torch.tensor([2.0]), requires_grad=True) 
+        if self.reg_sigmoid_temp:
+            if self.reg_sigmoid_temp_if_learn:
+                self.temp = torch.nn.Parameter(torch.tensor([self.reg_sigmoid_temp]), requires_grad=True)
+            else:
+                self.temp = torch.nn.Parameter(torch.tensor([self.reg_sigmoid_temp]), requires_grad=False)
+
 
         self.fc_res = nn.Linear(self.vec.shape[0], self.vec.shape[0])
         # self.fc_res = nn.Linear(self.semantic_last_dim, self.vec.shape[0])
@@ -224,7 +244,9 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
 
                 if self.reg_ag_to_cs:
-                    # import pdb;pdb.set_trace()
+                    #import pdb;pdb.set_trace()
+                    #print(self.temp)
+                    #print(self.scale)
                     cs_fc_parameter = semantic_score
 
                     for layer in self.fc_ag_to_cs:
@@ -237,7 +259,24 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     if self.reg_bn_tanh:
                         cs_fc_parameter = self.tanh(self.bn(cs_fc_parameter))
                     if self.reg_bn_sigmoid:
-                        cs_fc_parameter = 2*(self.sigmoid(self.bn(cs_fc_parameter))-0.5)
+                        if self.reg_sigmoid_scaling or self.reg_sigmoid_scaling2:
+                            cs_fc_parameter = self.scale*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
+                            # print(cs_fc_parameter.max())
+                            # print(cs_fc_parameter.min())
+                        # elif self.reg_sigmoid_scaling2:
+                        #     cs_fc_parameter = 2*self.scale*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
+                        elif self.reg_sigmoid_temp > 0:
+                            cs_fc_parameter = 2*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
+                        else:
+                            cs_fc_parameter = 2*(self.sigmoid(self.bn(cs_fc_parameter))-0.5)
+
+                            # print(cs_fc_parameter.max())
+                            # print(cs_fc_parameter.min())
+                if self.res_connect:
+                    short = self.shortcut(semantic_score)
+                    semantic_score  =  semantic_score + short
+
+
 
                 semantic_score = torch.mm(semantic_score, self.vec)
             else:
