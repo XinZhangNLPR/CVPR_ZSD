@@ -182,15 +182,29 @@ class ZeroShotTwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
 
         # RPN forward and loss
         if self.with_rpn:
-            rpn_outs = self.rpn_head(x)
+               
+            if self.rpn_head.high_order:
+                self.rpn_head.select_voc_index =  self.high_order_compute()
+                rpn_outs = self.rpn_head(x)
+                rpn_cls_score_ho = rpn_outs[-1]
+                rpn_outs = rpn_outs[:-1]
+            else:
+                rpn_outs = self.rpn_head(x)
             # if self.share_bg:
             if self.bbox_sync_bg or self.mask_sync_bg:
                 bg_vector = rpn_outs[-1]
                 rpn_outs = rpn_outs[:-1]
+
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
-                                          self.train_cfg.rpn)
-            rpn_losses = self.rpn_head.loss(
-                *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+                                        self.train_cfg.rpn)
+            #import pdb;pdb.set_trace()
+            if self.rpn_head.high_order:
+                rpn_losses = self.rpn_head.loss(
+                    *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore,rpn_cls_score_ho = rpn_cls_score_ho)
+            else:
+                rpn_losses = self.rpn_head.loss(
+                    *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)               
+
             losses.update(rpn_losses)
 
             proposal_cfg = self.train_cfg.get('rpn_proposal',
@@ -315,6 +329,10 @@ class ZeroShotTwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
 
         x = self.extract_feat(img)
         # if self.share_bg:
+        #import pdb;pdb.set_trace()
+
+        if self.rpn_head.high_order:
+            self.rpn_head.select_voc_index =  self.high_order_compute()
         if self.bbox_sync_bg or self.mask_sync_bg:
             proposal_list, bg_vector = self.simple_test_rpn(
                 x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
@@ -409,3 +427,15 @@ class ZeroShotTwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
             return bbox_results, segm_results
         else:
             return bbox_results
+
+    def high_order_compute(self):
+        if self.rpn_head.high_order:
+            if self.rpn_head.sinkhorn_arg:
+                bg_pt = (self.rpn_head.vec_fb.weight.data[0] + self.rpn_head.vec_fb.weight.data[2]+ self.rpn_head.vec_fb.weight.data[4]) / 3.0
+                fg_pt = (self.rpn_head.vec_fb.weight.data[1] + self.rpn_head.vec_fb.weight.data[3]+ self.rpn_head.vec_fb.weight.data[5]) / 3.0
+                bg_fg = torch.cat([bg_pt.unsqueeze(0).squeeze(-1).squeeze(-1),fg_pt.unsqueeze(0).squeeze(-1).squeeze(-1)])
+                cost =  torch.mm(bg_fg, self.rpn_head.voc_base)
+                _, pi = self.rpn_head.sinkhorn(self.rpn_head.mu, self.rpn_head.nu, torch.exp(-cost))
+                _,select_voc_index = pi.sort()
+                select_voc_index = select_voc_index[:,:self.rpn_head.sinkhorn_arg['s']]
+        return select_voc_index

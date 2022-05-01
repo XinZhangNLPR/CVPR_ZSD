@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from mmcv.cnn import normal_init
+from mmdet.models import losses
 
 from mmdet.core import (AnchorGenerator, anchor_target, delta2bbox, force_fp32,
                         multi_apply, multiclass_nms)
@@ -43,6 +44,7 @@ class BackgroundAwareAnchorHead(nn.Module):
                  target_stds=(1.0, 1.0, 1.0, 1.0),
                  vec_path=None,
                  voc_path=None,
+                 high_order = None, ###
                  sync_bg=False,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
@@ -66,6 +68,7 @@ class BackgroundAwareAnchorHead(nn.Module):
         self.vec_path = vec_path
         self.sync_bg = sync_bg
 
+        self.high_order = high_order
         self.use_sigmoid_cls = loss_cls.get('use_sigmoid', False)
         self.sampling = loss_cls['type'] not in ['FocalLoss', 'GHMC']
         if self.use_sigmoid_cls:
@@ -107,7 +110,36 @@ class BackgroundAwareAnchorHead(nn.Module):
         self.vec_bg_weight = self.vec_seen[:, 0]
         self.vec_bg_weight = torch.tensor(self.vec_bg_weight).cuda().view([1, self.semantic_dims])
         self.vec_fb = nn.Conv2d(self.semantic_dims, 2*self.num_anchors, 1, bias=False)
+        if self.high_order:
+            self.voc_base = np.loadtxt(self.high_order['voc_path'], dtype='float32', delimiter=',')
+            self.voc_base = torch.tensor(self.voc_base, dtype=torch.float32).cuda() 
+            self.sinkhorn_arg = self.high_order['OT_select_voc']
+            if self.high_order['OT_select_voc']:
+                # self.sinkhorn_arg = self.high_order['OT_select_voc']
+                self.sinkhorn = SinkhornDistance(eps=self.sinkhorn_arg['eps'], max_iter=self.sinkhorn_arg['iter'])
+                #import pdb;pdb.set_trace()
+                self.nu = torch.ones(self.voc_base.shape[1])*self.sinkhorn_arg['d']  # vocabulary
+                self.nu = self.nu.cuda()
+                self.mu = torch.ones(self.sinkhorn_arg['s_dim'])* self.sinkhorn_arg['s'] # fg&bg
+                self.mu = self.mu.cuda()
 
+                self.ho_conv = nn.Conv2d(self.semantic_dims, self.sinkhorn_arg['s']*self.sinkhorn_arg['s_dim'],1,bias=False)
+                self.ho_conv.weight.requires_grad = False
+
+                self.ho_sim_fg = nn.Conv2d(self.sinkhorn_arg['s'],self.num_anchors,1,bias=False)
+                self.ho_sim_fg.weight.requires_grad = False
+
+                self.ho_sim_bg = nn.Conv2d(self.sinkhorn_arg['s'],self.num_anchors,1,bias=False)
+                self.ho_sim_bg.weight.requires_grad = False
+
+                self.select_voc_index = torch.ones(self.sinkhorn_arg['s_dim'],self.sinkhorn_arg['s'])
+                self.select_voc_index.requires_grad = False
+                
+                
+            else:
+                self.ho_conv = nn.Conv2d(self.semantic_dims, self.voc_base.shape[1],1,bias=False)
+                self.ho_conv.weight.requires_grad = False
+            
     def _init_layers(self):
         # 1024*300
         self.conv_cls = nn.Conv2d(self.in_channels,
@@ -175,8 +207,9 @@ class BackgroundAwareAnchorHead(nn.Module):
         return anchor_list, valid_flag_list
 
     def loss_single(self, cls_score, bbox_pred, labels, label_weights,
-                    bbox_targets, bbox_weights, num_total_samples, cfg):
+                    bbox_targets, bbox_weights, rpn_cls_score_ho = None ,num_total_samples= None , cfg= None  ):
         # classification loss
+        #import pdb;pdb.set_trace()    
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
         cls_score = cls_score.permute(0, 2, 3,
@@ -192,6 +225,12 @@ class BackgroundAwareAnchorHead(nn.Module):
             bbox_targets,
             bbox_weights,
             avg_factor=num_total_samples)
+        if self.high_order:
+            rpn_cls_score_ho = rpn_cls_score_ho.permute(0, 2, 3,
+                                      1).reshape(-1, self.cls_out_channels)
+            loss_ho = self.loss_cls(
+                rpn_cls_score_ho, labels, label_weights, avg_factor=num_total_samples)
+            return loss_cls, loss_bbox, loss_ho
         return loss_cls, loss_bbox
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
@@ -202,7 +241,9 @@ class BackgroundAwareAnchorHead(nn.Module):
              gt_labels,
              img_metas,
              cfg,
-             gt_bboxes_ignore=None):
+             gt_bboxes_ignore=None,
+             rpn_cls_score_ho = None):
+        #import pdb;pdb.set_trace() 
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         assert len(featmap_sizes) == len(self.anchor_generators)
 
@@ -229,16 +270,31 @@ class BackgroundAwareAnchorHead(nn.Module):
          num_total_pos, num_total_neg) = cls_reg_targets
         num_total_samples = (
             num_total_pos + num_total_neg if self.sampling else num_total_pos)
-        losses_cls, losses_bbox = multi_apply(
-            self.loss_single,
-            cls_scores,
-            bbox_preds,
-            labels_list,
-            label_weights_list,
-            bbox_targets_list,
-            bbox_weights_list,
-            num_total_samples=num_total_samples,
-            cfg=cfg)
+        if self.high_order:
+            #import pdb;pdb.set_trace()    
+            losses_cls, losses_bbox, losses_ho = multi_apply(
+                self.loss_single,
+                cls_scores,
+                bbox_preds,
+                labels_list,
+                label_weights_list,
+                bbox_targets_list,
+                bbox_weights_list,
+                rpn_cls_score_ho,
+                num_total_samples=num_total_samples,
+                cfg=cfg)
+            return dict(loss_cls=losses_cls, loss_bbox=losses_bbox, loss_ho = losses_ho)
+        else:        
+            losses_cls, losses_bbox = multi_apply(
+                self.loss_single,
+                cls_scores,
+                bbox_preds,
+                labels_list,
+                label_weights_list,
+                bbox_targets_list,
+                bbox_weights_list,
+                num_total_samples=num_total_samples,
+                cfg=cfg)
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
@@ -360,3 +416,56 @@ class BackgroundAwareAnchorHead(nn.Module):
                                                 cfg.score_thr, cfg.nms,
                                                 cfg.max_per_img)
         return det_bboxes, det_labels
+
+
+class SinkhornDistance(nn.Module):
+    r"""
+        Given two empirical measures each with :math:`P_1` locations
+        :math:`x\in\mathbb{R}^{D_1}` and :math:`P_2` locations :math:`y\in\mathbb{R}^{D_2}`,
+        outputs an approximation of the regularized OT cost for point clouds.
+        Args:
+        eps (float): regularization coefficient
+        max_iter (int): maximum number of Sinkhorn iterations
+        reduction (string, optional): Specifies the reduction to apply to the output:
+        'none' | 'mean' | 'sum'. 'none': no reduction will be applied,
+        'mean': the sum of the output will be divided by the number of
+        elements in the output, 'sum': the output will be summed. Default: 'none'
+        Shape:
+            - Input: :math:`(N, P_1, D_1)`, :math:`(N, P_2, D_2)`
+            - Output: :math:`(N)` or :math:`()`, depending on `reduction`
+    """
+
+    def __init__(self, eps=1e-3, max_iter=100, reduction='none'):
+        super(SinkhornDistance, self).__init__()
+        self.eps = eps
+        self.max_iter = max_iter
+        self.reduction = reduction
+
+    def forward(self, mu, nu, C):
+        u = torch.ones_like(mu)
+        v = torch.ones_like(nu)
+
+        # Sinkhorn iterations
+        for i in range(self.max_iter):
+            v = self.eps * \
+                (torch.log(
+                    nu + 1e-8) - torch.logsumexp(self.M(C, u, v).transpose(-2, -1), dim=-1)) + v
+            u = self.eps * \
+                (torch.log(
+                    mu + 1e-8) - torch.logsumexp(self.M(C, u, v), dim=-1)) + u
+
+        U, V = u, v
+        # Transport plan pi = diag(a)*K*diag(b)
+        pi = torch.exp(
+            self.M(C, U, V)).detach()
+        # Sinkhorn distance
+        cost = torch.sum(
+            pi * C, dim=(-2, -1))
+        return cost, pi
+
+    def M(self, C, u, v):
+        '''
+        "Modified cost for logarithmic updates"
+        "$M_{ij} = (-c_{ij} + u_i + v_j) / epsilon$"
+        '''
+        return (-C + u.unsqueeze(-1) + v.unsqueeze(-2)) / self.eps

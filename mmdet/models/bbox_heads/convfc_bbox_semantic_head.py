@@ -244,13 +244,8 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     d_semantic_feature = self.d_fc_semantic(d_semantic_feature)
 
                 if self.reg_ag_to_cs:
-                    #import pdb;pdb.set_trace()
-                    #print(self.temp)
-                    #print(self.scale)
                     cs_fc_parameter = semantic_score
-
                     for layer in self.fc_ag_to_cs:
-                        #import pdb;pdb.set_trace()
                         cs_fc_parameter = layer(cs_fc_parameter)
                     if self.reg_relu:
                         cs_fc_parameter = self.relu(cs_fc_parameter)
@@ -261,10 +256,6 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                     if self.reg_bn_sigmoid:
                         if self.reg_sigmoid_scaling or self.reg_sigmoid_scaling2:
                             cs_fc_parameter = self.scale*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
-                            # print(cs_fc_parameter.max())
-                            # print(cs_fc_parameter.min())
-                        # elif self.reg_sigmoid_scaling2:
-                        #     cs_fc_parameter = 2*self.scale*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
                         elif self.reg_sigmoid_temp > 0:
                             cs_fc_parameter = 2*(self.sigmoid(self.bn(cs_fc_parameter)/self.temp)-0.5)
                         else:

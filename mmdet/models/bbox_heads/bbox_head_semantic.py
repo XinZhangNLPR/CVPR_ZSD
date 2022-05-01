@@ -233,7 +233,7 @@ class BBoxSemanticHead(nn.Module):
              d_feature=None,
              reduction_override=None):
         losses = dict()
-        import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         
         if self.loss_rank:
             #import pdb;pdb.set_trace()

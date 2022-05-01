@@ -7,7 +7,7 @@ from mmdet.core import delta2bbox
 from mmdet.ops import nms
 from ..registry import HEADS
 from .ba_anchor_head import BackgroundAwareAnchorHead
-
+import numpy as np
 
 @HEADS.register_module
 class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
@@ -15,7 +15,6 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
     def __init__(self, in_channels, freeze=False, **kwargs):
         self.freeze=freeze
         super(BackgroundAwareRPNHead, self).__init__(2, in_channels, **kwargs)
-
     def _init_layers(self):
         self.rpn_conv = nn.Conv2d(
             self.in_channels, self.feat_channels, 3, padding=1)
@@ -40,17 +39,38 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
         x = self.rpn_conv(x)
         x = F.relu(x, inplace=True)
         # B C(900) W H
-        # import pdb;pdb.set_trace()
         rpn_cls_score = self.rpn_cls_conv_T(x)
         if self.voc:
             rpn_cls_score = self.voc_conv(rpn_cls_score)
+        if self.high_order:
+            #import pdb;pdb.set_trace()
+            if self.sinkhorn_arg:
+                voc_select = self.voc_base[:,self.select_voc_index].permute(1,2,0).view(-1,self.semantic_dims)
+                with torch.no_grad():
+                    self.ho_conv.weight.data = voc_select.unsqueeze(-1).unsqueeze(-1)
+            else:
+                 self.ho_conv.weight.data = self.voc_base.unsqueeze(-1).unsqueeze(-1)
+            ho_feat = self.ho_conv(rpn_cls_score) # feat <-> voc_select
 
+            bg_fg_all = self.vec_fb.weight.data.squeeze(-1).squeeze(-1)
+            cost_all =  torch.mm(bg_fg_all, self.voc_base) # bg_fg <-> voc_all
+            ho_bg_fg_all = torch.gather(cost_all,1,self.select_voc_index.repeat(3,1)) #bg_fg <-> voc_select  [6,256]
+        
+            with torch.no_grad():
+                self.ho_sim_bg.weight.data = ho_bg_fg_all[0::2].unsqueeze(-1).unsqueeze(-1)
+                self.ho_sim_fg.weight.data = ho_bg_fg_all[1::2].unsqueeze(-1).unsqueeze(-1)
+            ho_feat_bg, ho_feat_fg = ho_feat.split(256,1)
+            bf_index = [0,3,1,4,2,5]
+            rpn_cls_score_ho = torch.cat([self.ho_sim_bg(ho_feat_bg),self.ho_sim_fg(ho_feat_fg)],1)[:,bf_index,:,:]
         rpn_cls_score = self.vec_fb(rpn_cls_score)
-
         rpn_bbox_pred = self.rpn_reg(x)
         if self.sync_bg:
-            return rpn_cls_score, rpn_bbox_pred, \
-                   (self.vec_fb.weight.data[0] + self.vec_fb.weight.data[2]+ self.vec_fb.weight.data[4]) / 3.0
+            if self.high_order:
+                return rpn_cls_score, rpn_bbox_pred, \
+                    (self.vec_fb.weight.data[0] + self.vec_fb.weight.data[2]+ self.vec_fb.weight.data[4]) / 3.0, rpn_cls_score_ho           
+            else:
+                return rpn_cls_score, rpn_bbox_pred, \
+                    (self.vec_fb.weight.data[0] + self.vec_fb.weight.data[2]+ self.vec_fb.weight.data[4]) / 3.0
         return rpn_cls_score, rpn_bbox_pred
 
     def loss(self,
@@ -59,7 +79,8 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
              gt_bboxes,
              img_metas,
              cfg,
-             gt_bboxes_ignore=None):
+             gt_bboxes_ignore=None,
+             rpn_cls_score_ho = None):
         losses = super(BackgroundAwareRPNHead, self).loss(
             cls_scores,
             bbox_preds,
@@ -67,7 +88,13 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
             None,
             img_metas,
             cfg,
-            gt_bboxes_ignore=gt_bboxes_ignore)
+            gt_bboxes_ignore=gt_bboxes_ignore,
+            rpn_cls_score_ho = rpn_cls_score_ho)
+
+        if self.high_order:
+            return dict(
+                loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'],loss_rpn_ho = losses['loss_ho'])
+            
         return dict(
             loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'])
 
@@ -121,3 +148,5 @@ class BackgroundAwareRPNHead(BackgroundAwareAnchorHead):
             _, topk_inds = scores.topk(num)
             proposals = proposals[topk_inds, :]
         return proposals
+
+
