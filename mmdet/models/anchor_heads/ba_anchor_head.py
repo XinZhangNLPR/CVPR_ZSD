@@ -46,6 +46,7 @@ class BackgroundAwareAnchorHead(nn.Module):
                  voc_path=None,
                  high_order = None, ###
                  sync_bg=False,
+                 objectness_sp = False,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
@@ -69,6 +70,8 @@ class BackgroundAwareAnchorHead(nn.Module):
         self.sync_bg = sync_bg
 
         self.high_order = high_order
+        self.objectness_sp = objectness_sp
+        
         self.use_sigmoid_cls = loss_cls.get('use_sigmoid', False)
         self.sampling = loss_cls['type'] not in ['FocalLoss', 'GHMC']
         if self.use_sigmoid_cls:
@@ -207,7 +210,7 @@ class BackgroundAwareAnchorHead(nn.Module):
         return anchor_list, valid_flag_list
 
     def loss_single(self, cls_score, bbox_pred, labels, label_weights,
-                    bbox_targets, bbox_weights, rpn_cls_score_ho = None ,num_total_samples= None , cfg= None  ):
+                    bbox_targets, bbox_weights,num_total_samples= None , cfg= None  ):
         # classification loss
         #import pdb;pdb.set_trace()    
         labels = labels.reshape(-1)
@@ -225,12 +228,6 @@ class BackgroundAwareAnchorHead(nn.Module):
             bbox_targets,
             bbox_weights,
             avg_factor=num_total_samples)
-        if self.high_order:
-            rpn_cls_score_ho = rpn_cls_score_ho.permute(0, 2, 3,
-                                      1).reshape(-1, self.cls_out_channels)
-            loss_ho = self.loss_cls(
-                rpn_cls_score_ho, labels, label_weights, avg_factor=num_total_samples)
-            return loss_cls, loss_bbox, loss_ho
         return loss_cls, loss_bbox
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
@@ -241,8 +238,7 @@ class BackgroundAwareAnchorHead(nn.Module):
              gt_labels,
              img_metas,
              cfg,
-             gt_bboxes_ignore=None,
-             rpn_cls_score_ho = None):
+             gt_bboxes_ignore=None):
         #import pdb;pdb.set_trace() 
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         assert len(featmap_sizes) == len(self.anchor_generators)
@@ -270,31 +266,18 @@ class BackgroundAwareAnchorHead(nn.Module):
          num_total_pos, num_total_neg) = cls_reg_targets
         num_total_samples = (
             num_total_pos + num_total_neg if self.sampling else num_total_pos)
-        if self.high_order:
-            #import pdb;pdb.set_trace()    
-            losses_cls, losses_bbox, losses_ho = multi_apply(
-                self.loss_single,
-                cls_scores,
-                bbox_preds,
-                labels_list,
-                label_weights_list,
-                bbox_targets_list,
-                bbox_weights_list,
-                rpn_cls_score_ho,
-                num_total_samples=num_total_samples,
-                cfg=cfg)
-            return dict(loss_cls=losses_cls, loss_bbox=losses_bbox, loss_ho = losses_ho)
-        else:        
-            losses_cls, losses_bbox = multi_apply(
-                self.loss_single,
-                cls_scores,
-                bbox_preds,
-                labels_list,
-                label_weights_list,
-                bbox_targets_list,
-                bbox_weights_list,
-                num_total_samples=num_total_samples,
-                cfg=cfg)
+
+              
+        losses_cls, losses_bbox = multi_apply(
+            self.loss_single,
+            cls_scores,
+            bbox_preds,
+            labels_list,
+            label_weights_list,
+            bbox_targets_list,
+            bbox_weights_list,
+            num_total_samples=num_total_samples,
+            cfg=cfg)
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
@@ -384,6 +367,7 @@ class BackgroundAwareAnchorHead(nn.Module):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             cls_score = cls_score.permute(1, 2,
                                           0).reshape(-1, self.cls_out_channels)
+            
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:

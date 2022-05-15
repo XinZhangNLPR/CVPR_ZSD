@@ -12,11 +12,14 @@ from. anchor_semantic_head import AnchorSemanticHead
 from .rpn_head_semantic import RPNSemanticHead
 from .ba_anchor_head import BackgroundAwareAnchorHead
 from .barpn_head import BackgroundAwareRPNHead
+from .obj_anchor_head import ObjAnchorHead
+from .obj_rpn_head import ObjRPNHead
+
 
 
 __all__ = [
     'AnchorHead', 'GuidedAnchorHead', 'FeatureAdaption', 'RPNHead',
     'GARPNHead', 'RetinaHead', 'GARetinaHead', 'SSDHead', 'FCOSHead',
     'RepPointsHead', 'FoveaHead', 'AnchorSemanticHead', 'RPNSemanticHead',
-    'BackgroundAwareAnchorHead', 'BackgroundAwareRPNHead'
+    'BackgroundAwareAnchorHead', 'BackgroundAwareRPNHead','ObjAnchorHead','ObjRPNHead'
 ]

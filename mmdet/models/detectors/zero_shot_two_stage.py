@@ -182,28 +182,26 @@ class ZeroShotTwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
 
         # RPN forward and loss
         if self.with_rpn:
-               
             if self.rpn_head.high_order:
-                self.rpn_head.select_voc_index =  self.high_order_compute()
-                rpn_outs = self.rpn_head(x)
-                rpn_cls_score_ho = rpn_outs[-1]
-                rpn_outs = rpn_outs[:-1]
-            else:
-                rpn_outs = self.rpn_head(x)
+                self.rpn_head.select_voc_index =  self.high_order_compute() 
+            rpn_outs = self.rpn_head(x)
             # if self.share_bg:
             if self.bbox_sync_bg or self.mask_sync_bg:
                 bg_vector = rpn_outs[-1]
                 rpn_outs = rpn_outs[:-1]
 
-            rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
-                                        self.train_cfg.rpn)
             #import pdb;pdb.set_trace()
-            if self.rpn_head.high_order:
-                rpn_losses = self.rpn_head.loss(
-                    *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore,rpn_cls_score_ho = rpn_cls_score_ho)
+            if self.rpn_head.objectness_type == 'superpixel':
+                rpn_loss_inputs = rpn_outs + (gt_bboxes, gt_masks, None, img_meta,
+                                            self.train_cfg.rpn)
             else:
-                rpn_losses = self.rpn_head.loss(
-                    *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)               
+                rpn_loss_inputs = rpn_outs + (gt_bboxes, None, None, img_meta,
+                                            self.train_cfg.rpn)
+            # gt_labels = None
+            #import pdb;pdb.set_trace()
+
+            rpn_losses = self.rpn_head.loss(
+                *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)               
 
             losses.update(rpn_losses)
 
