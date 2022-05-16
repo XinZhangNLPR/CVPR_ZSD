@@ -52,8 +52,7 @@ def object_target(anchor_list,
     if gt_labels_list is None:
         gt_labels_list = [None for _ in range(num_imgs)]
     (all_labels, all_label_weights, all_bbox_targets, all_bbox_weights,
-     pos_inds_list, neg_inds_list, 
-     all_objectness_targets, all_objectness_weights) = multi_apply(
+     pos_inds_list, neg_inds_list) = multi_apply(
          object_target_single,
          anchor_list,
          valid_flag_list,
@@ -81,15 +80,10 @@ def object_target(anchor_list,
     label_weights_list = images_to_levels(all_label_weights, num_level_anchors)
     bbox_targets_list = images_to_levels(all_bbox_targets, num_level_anchors)
     bbox_weights_list = images_to_levels(all_bbox_weights, num_level_anchors)
-    objectness_targets_list = images_to_levels(all_objectness_targets,
-                                            num_level_anchors)
-    objectness_weights_list = images_to_levels(all_objectness_weights,
-                                            num_level_anchors)
 
 
     return (labels_list, label_weights_list, bbox_targets_list,
-            bbox_weights_list, num_total_pos, num_total_neg,
-            objectness_targets_list, objectness_weights_list)
+            bbox_weights_list, num_total_pos, num_total_neg)
 
 
 def images_to_levels(target, num_level_anchors):
@@ -140,17 +134,12 @@ def object_target_single(flat_anchors,
         sampling_result = bbox_sampler.sample(assign_result, anchors,
                                               gt_bboxes)
 
-    objectness_assigner = build_assigner(cfg.objectness_assigner)
-    objectness_assign_result  = objectness_assigner.assign(anchors, gt_bboxes,
-                                            gt_bboxes_ignore, gt_labels)
-    objectness_sampler  = build_sampler(cfg.objectness_sampler)
-    objectness_sampling_result = objectness_sampler.sample(objectness_assign_result , anchors,
-                                            gt_bboxes)    
 
     num_valid_anchors = anchors.shape[0]
     bbox_targets = torch.zeros_like(anchors)
     bbox_weights = torch.zeros_like(anchors)
-    labels = anchors.new_zeros(num_valid_anchors, dtype=torch.long)
+    #labels = anchors.new_zeros(num_valid_anchors, dtype=torch.long)
+    labels = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
     label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
 
     pos_inds = sampling_result.pos_inds
@@ -162,69 +151,48 @@ def object_target_single(flat_anchors,
         bbox_targets[pos_inds, :] = pos_bbox_targets
         bbox_weights[pos_inds, :] = 1.0
         if gt_labels is None:
-            labels[pos_inds] = 1
+            #labels[pos_inds] = 1
+            if objectness_type == 'superpixel':
+                #import pdb;pdb.set_trace()
+                #pos_objectness_targets1 = bbox_overlaps(objectness_sampling_result.pos_bboxes, objectness_sampling_result.pos_gt_bboxes,is_aligned=True)
+                #pos_objectness_targets = compute_superpixel_scores(objectness_sampling_result.pos_bboxes, pos_assigned_gt_inds, gt_masks,0.761)             
+                pos_objectness_targets = compute_superpixel_scores(sampling_result.pos_bboxes,
+                                        sampling_result.pos_assigned_gt_inds, 
+                                        gt_masks)            
+            elif objectness_type == 'Centerness':
+                pos_objectness_bbox_targets = bbox2delta(sampling_result.pos_bboxes,
+                                        sampling_result.pos_gt_bboxes,
+                                        target_means, target_stds)
+                valid_targets = torch.min(pos_objectness_bbox_targets,-1)[0] > 0
+                pos_objectness_bbox_targets[valid_targets==False,:] = 0
+                top_bottom = pos_objectness_bbox_targets[:,0:2]
+                left_right = pos_objectness_bbox_targets[:,2:4]
+                pos_objectness_targets = torch.sqrt(
+                    (torch.min(top_bottom, -1)[0] / 
+                        (torch.max(top_bottom, -1)[0] + 1e-12)) *
+                    (torch.min(left_right, -1)[0] / 
+                        (torch.max(left_right, -1)[0] + 1e-12)))
+            elif objectness_type == 'BoxIoU':
+                pos_objectness_targets = bbox_overlaps(
+                    sampling_result.pos_bboxes,
+                    sampling_result.pos_gt_bboxes,
+                    is_aligned=True)
+            #import pdb;pdb.set_trace()
+            labels[pos_inds] = pos_objectness_targets.clone().detach()
+
         else:
             labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
         if cfg.pos_weight <= 0:
             label_weights[pos_inds] = 1.0
         else:
             label_weights[pos_inds] = cfg.pos_weight
+
+
+
     if len(neg_inds) > 0:
         label_weights[neg_inds] = 1.0
 
-    objectness_targets = anchors.new_zeros(
-        num_valid_anchors, dtype=torch.float)
-    objectness_weights = anchors.new_zeros(
-        num_valid_anchors, dtype=torch.float)
-    objectness_pos_inds = objectness_sampling_result.pos_inds
-    objectness_neg_inds = objectness_sampling_result.neg_inds
-    # objectness_pos_neg_inds = torch.cat(
-    #     [objectness_pos_inds, objectness_neg_inds])
-    #import pdb;pdb.set_trace()
-    
-    #import pdb;pdb.set_trace()
 
-    if len(objectness_pos_inds) > 0:
-        # Centerness as tartet -- Default
-        if objectness_type == 'superpixel':
-            #import pdb;pdb.set_trace()
-            pos_assigned_gt_inds = objectness_sampling_result.pos_assigned_gt_inds
-            #pos_objectness_targets1 = bbox_overlaps(objectness_sampling_result.pos_bboxes, objectness_sampling_result.pos_gt_bboxes,is_aligned=True)
-            #pos_objectness_targets = compute_superpixel_scores(objectness_sampling_result.pos_bboxes, pos_assigned_gt_inds, gt_masks,0.761)             
-            pos_objectness_targets = compute_superpixel_scores(objectness_sampling_result.pos_bboxes,
-                                     pos_assigned_gt_inds, 
-                                     gt_masks)            
-        elif objectness_type == 'Centerness':
-            pos_objectness_bbox_targets = bbox2delta(objectness_sampling_result.pos_bboxes,
-                                      objectness_sampling_result.pos_gt_bboxes,
-                                      target_means, target_stds)
-            valid_targets = torch.min(pos_objectness_bbox_targets,-1)[0] > 0
-            pos_objectness_bbox_targets[valid_targets==False,:] = 0
-            top_bottom = pos_objectness_bbox_targets[:,0:2]
-            left_right = pos_objectness_bbox_targets[:,2:4]
-            pos_objectness_targets = torch.sqrt(
-                (torch.min(top_bottom, -1)[0] / 
-                    (torch.max(top_bottom, -1)[0] + 1e-12)) *
-                (torch.min(left_right, -1)[0] / 
-                    (torch.max(left_right, -1)[0] + 1e-12)))
-        elif objectness_type == 'BoxIoU':
-            pos_objectness_targets = bbox_overlaps(
-                objectness_sampling_result.pos_bboxes,
-                objectness_sampling_result.pos_gt_bboxes,
-                is_aligned=True)
-
-
-        else:
-            raise ValueError(
-                'objectness_type must be either "Centerness" (Default) or '
-                '"BoxIoU".')
-
-        objectness_targets[objectness_pos_inds] = pos_objectness_targets
-        objectness_weights[objectness_pos_inds] = 1.0   
-
-    if len(objectness_neg_inds) > 0: 
-        objectness_targets[objectness_neg_inds] = 0.0
-        objectness_weights[objectness_neg_inds] = 1.0
 
 
 
@@ -235,10 +203,8 @@ def object_target_single(flat_anchors,
         label_weights = unmap(label_weights, num_total_anchors, inside_flags)
         bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
         bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
-        objectness_targets = unmap(objectness_targets, num_total_anchors, inside_flags)
-        objectness_weights = unmap(objectness_weights, num_total_anchors, inside_flags)
-    return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,neg_inds,
-            objectness_targets, objectness_weights)
+
+    return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,neg_inds)
 
 
 def anchor_inside_flags(flat_anchors, valid_flags, img_shape,

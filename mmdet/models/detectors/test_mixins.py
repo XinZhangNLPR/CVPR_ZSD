@@ -10,7 +10,7 @@ class RPNTestMixin(object):
         # if self.rpn_head.high_order:
         #     ho_cls = rpn_outs[-1]
         #     rpn_outs = (ho_cls,rpn_outs[1],rpn_outs[2])
-        if len(rpn_outs) == 4: # bg_vector
+        if len(rpn_outs) == 3: # bg_vector
             bg_vector = rpn_outs[-1]
             rpn_outs = rpn_outs[:-1]
             proposal_inputs = rpn_outs + (img_meta, rpn_test_cfg)

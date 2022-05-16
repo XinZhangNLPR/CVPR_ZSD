@@ -47,7 +47,7 @@ class ObjAnchorHead(nn.Module):
                  high_order = None, ###
                  sync_bg=False,
                  objectness_type = 'superpixel',
-                 loss_objectness = dict(type='L1Loss', loss_weight=1.0),
+                 #loss_objectness = dict(type='L1Loss', loss_weight=1.0),
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
@@ -84,7 +84,7 @@ class ObjAnchorHead(nn.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
-        self.loss_objectness = build_loss(loss_objectness)
+        #self.loss_objectness = build_loss(loss_objectness)
         self.fp16_enabled = False
 
         self.anchor_generators = []

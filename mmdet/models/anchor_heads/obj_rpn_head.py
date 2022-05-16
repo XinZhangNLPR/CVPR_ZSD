@@ -21,7 +21,7 @@ class ObjRPNHead(ObjAnchorHead):
             self.in_channels, self.feat_channels, 3, padding=1)
         self.rpn_cls_conv_T = nn.Conv2d(self.feat_channels, self.semantic_dims, 1)
         self.rpn_reg = nn.Conv2d(self.feat_channels, self.num_anchors * 4, 1)
-        self.rpn_obj = nn.Conv2d(self.feat_channels, self.num_anchors, 1)
+        #self.rpn_obj = nn.Conv2d(self.feat_channels, self.num_anchors, 1)
         if self.freeze:
             for m in [self.rpn_conv, self.rpn_cls, self.rpn_reg]:
                 for param in m.parameters():
@@ -31,7 +31,7 @@ class ObjRPNHead(ObjAnchorHead):
         normal_init(self.rpn_conv, std=0.01)
         normal_init(self.rpn_cls_conv_T, std=0.01)
         normal_init(self.rpn_reg, std=0.01)
-        normal_init(self.rpn_obj, std=0.01)
+        #normal_init(self.rpn_obj, std=0.01)
         
         normal_init(self.vec_fb)
         with torch.no_grad():
@@ -70,16 +70,17 @@ class ObjRPNHead(ObjAnchorHead):
         else:
             rpn_cls_score = self.vec_fb(rpn_cls_score)
         rpn_bbox_pred = self.rpn_reg(x)
-        rpn_objectness_pred = self.rpn_obj(x)
+        #rpn_objectness_pred = self.rpn_obj(x)
         if self.sync_bg:
-            return rpn_cls_score, rpn_bbox_pred, rpn_objectness_pred,\
+            return rpn_cls_score, rpn_bbox_pred,\
                 (self.vec_fb.weight.data[0] + self.vec_fb.weight.data[2]+ self.vec_fb.weight.data[4]) / 3.0
-        return rpn_cls_score, rpn_bbox_pred, rpn_objectness_pred
+        return rpn_cls_score, rpn_bbox_pred
 
-    def loss_single(self, cls_score, bbox_pred, objectness_score, labels, label_weights,
-                    bbox_targets, bbox_weights,
-                    objectness_targets, objectness_weights, num_total_samples= None , cfg= None  ):
+    def loss_single(self, cls_score, bbox_pred, labels, label_weights,
+                    bbox_targets, bbox_weights, num_total_samples= None , cfg= None  ):
         # classification loss
+
+        #import pdb;pdb.set_trace()
            
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
@@ -99,18 +100,7 @@ class ObjRPNHead(ObjAnchorHead):
 
         # objectness loss
         #import pdb;pdb.set_trace() 
-        objectness_targets = objectness_targets.reshape(-1)
-        objectness_weights = objectness_weights.reshape(-1)
-        # assert self.cls_out_channels == 1, (
-        #     'cls_out_channels must be 1 for objectness learning.')
-        objectness_score = objectness_score.permute(0, 2, 3, 1).reshape(-1)
-
-        loss_objectness = self.loss_objectness(
-            objectness_score.sigmoid(), 
-            objectness_targets, 
-            objectness_weights, 
-            avg_factor=num_total_samples)
-        return loss_cls, loss_bbox, loss_objectness
+        return loss_cls, loss_bbox
 
 
     # def loss(self,
@@ -133,11 +123,10 @@ class ObjRPNHead(ObjAnchorHead):
     #     return dict(
     #         loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'],loss_rpn_obj=losses['loss_rpn_obj'])
 
-    @force_fp32(apply_to=('cls_scores', 'bbox_preds','objectness_score'))
+    @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
     def loss(self,
              cls_scores,
              bbox_preds,
-             objectness_score,
              gt_bboxes,
              gt_masks,
              gt_labels,
@@ -170,33 +159,27 @@ class ObjRPNHead(ObjAnchorHead):
         if cls_reg_obj_targets is None:
             return None
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
-         num_total_pos, num_total_neg, objectness_targets_list, objectness_weights_list) = cls_reg_obj_targets
+         num_total_pos, num_total_neg) = cls_reg_obj_targets
         num_total_samples = (
             num_total_pos + num_total_neg if self.sampling else num_total_pos)
 
               
-        losses_cls, losses_bbox, losses_objectness = multi_apply(
+        losses_cls, losses_bbox = multi_apply(
             self.loss_single,
             cls_scores,
             bbox_preds,
-            objectness_score,
             labels_list,
             label_weights_list,
             bbox_targets_list,
             bbox_weights_list,
-            objectness_targets_list,
-            objectness_weights_list,
             num_total_samples=num_total_samples,
             cfg=cfg)
         return dict(
             loss_rpn_cls=losses_cls, 
-            loss_rpn_bbox=losses_bbox,
-            loss_rpn_obj=losses_objectness,)
+            loss_rpn_bbox=losses_bbox)
 
-
-
-    @force_fp32(apply_to=('cls_scores', 'bbox_preds','objectness_scores'))
-    def get_bboxes(self, cls_scores, bbox_preds, objectness_scores, img_metas, cfg,
+    @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
+    def get_bboxes(self, cls_scores, bbox_preds, img_metas, cfg,
                    rescale=False):
         """
         Transform network output for a batch into labeled boxes.
@@ -218,8 +201,7 @@ class ObjRPNHead(ObjAnchorHead):
                 (n,) tensor where each item is the class index of the
                 corresponding box.
         """
-        assert len(cls_scores) == len(bbox_preds) and (
-            len(cls_scores) == len(objectness_scores))
+        assert len(cls_scores) == len(bbox_preds) 
         num_levels = len(cls_scores)
 
         device = cls_scores[0].device
@@ -237,14 +219,10 @@ class ObjRPNHead(ObjAnchorHead):
             bbox_pred_list = [
                 bbox_preds[i][img_id].detach() for i in range(num_levels)
             ]
-            objectness_score_list = [
-                objectness_scores[i][img_id].detach() for i in range(num_levels)
-            ]
-
 
             img_shape = img_metas[img_id]['img_shape']
             scale_factor = img_metas[img_id]['scale_factor']
-            proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list,objectness_score_list,
+            proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list,
                                                mlvl_anchors, img_shape,
                                                scale_factor, cfg, rescale)
             result_list.append(proposals)
@@ -255,7 +233,6 @@ class ObjRPNHead(ObjAnchorHead):
     def get_bboxes_single(self,
                           cls_scores,
                           bbox_preds,
-                          objectness_scores,
                           mlvl_anchors,
                           img_shape,
                           scale_factor,
@@ -265,7 +242,6 @@ class ObjRPNHead(ObjAnchorHead):
         for idx in range(len(cls_scores)):
             rpn_cls_score = cls_scores[idx]
             rpn_bbox_pred = bbox_preds[idx]
-            rpn_objectness_score = objectness_scores[idx]
             assert rpn_cls_score.size()[-2:] == rpn_bbox_pred.size()[-2:]
             anchors = mlvl_anchors[idx]
             rpn_cls_score = rpn_cls_score.permute(1, 2, 0)
@@ -273,20 +249,11 @@ class ObjRPNHead(ObjAnchorHead):
             if self.use_sigmoid_cls:
                 rpn_cls_score = rpn_cls_score.reshape(-1)
                 rpn_cls_score = rpn_cls_score.sigmoid()
-                rpn_objectness_score = rpn_objectness_score.permute(
-                1, 2, 0).reshape(-1)
-                rpn_objectness_scores = rpn_objectness_score.sigmoid()
-                scores = rpn_objectness_scores
+                scores = rpn_cls_score
             else:
                 rpn_cls_score = rpn_cls_score.reshape(-1, 2)
-                #scores = rpn_cls_score.softmax(dim=1)[:, 1]
-                rpn_objectness_score = rpn_objectness_score.permute(
-                1, 2, 0).reshape(-1)
-                rpn_objectness_scores = rpn_objectness_score.sigmoid()
-                #scores = rpn_objectness_scores
-                #scores = torch.sqrt(rpn_objectness_scores * rpn_cls_score.softmax(dim=1)[:, 1])              
-                scores = rpn_objectness_scores * rpn_cls_score.softmax(dim=1)[:, 1]
-                #scores = rpn_cls_score.softmax(dim=1)[:, 1]
+                scores = rpn_cls_score.softmax(dim=1)[:, 1]
+
             rpn_bbox_pred = rpn_bbox_pred.permute(1, 2, 0).reshape(-1, 4)
             if cfg.nms_pre > 0 and scores.shape[0] > cfg.nms_pre:
                 _, topk_inds = scores.topk(cfg.nms_pre)

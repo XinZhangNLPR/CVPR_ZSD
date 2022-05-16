@@ -43,6 +43,7 @@ def binary_cross_entropy(pred,
     # weighted element-wise losses
     if weight is not None:
         weight = weight.float()
+    import pdb;pdb.set_trace()
     loss = F.binary_cross_entropy_with_logits(
         pred, label.float(), weight, reduction='none')
     # do the reduction for the weighted loss
@@ -91,6 +92,7 @@ class CrossEntropyLoss(nn.Module):
                 reduction_override=None,
                 **kwargs):
         assert reduction_override in (None, 'none', 'mean', 'sum')
+        #import pdb;pdb.set_trace()
         reduction = (
             reduction_override if reduction_override else self.reduction)
         loss_cls = self.loss_weight * self.cls_criterion(
@@ -101,3 +103,46 @@ class CrossEntropyLoss(nn.Module):
             avg_factor=avg_factor,
             **kwargs)
         return loss_cls
+
+
+@LOSSES.register_module
+class BCELoss(nn.Module):
+
+    def __init__(self,
+                 use_sigmoid = 'False',
+                 reduction='mean',
+                 loss_weight=1.0):
+        super(BCELoss, self).__init__()
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+        self.cls_criterion = nn.BCELoss()
+    def forward(self,
+                cls_score,
+                label,
+                weight=None,
+                avg_factor=None,
+                reduction_override=None,
+                **kwargs):
+        assert reduction_override in (None, 'none', 'mean', 'sum')
+        #import pdb;pdb.set_trace()
+        reduction = (
+            reduction_override if reduction_override else self.reduction)
+        cls_score = F.softmax(cls_score, dim=1)
+        if cls_score.dim() != label.dim():
+            label = self.expand_binary_labels(label, cls_score.size(-1))
+        loss_cls = self.loss_weight * self.cls_criterion(
+            cls_score,
+            label)
+        return loss_cls
+
+
+    def expand_binary_labels(self,labels, label_channels):
+        #import pdb;pdb.set_trace()
+        bin_labels = labels.new_full((labels.size(0), label_channels), 0)
+        pos_inds = torch.nonzero(labels > 0).squeeze()
+        neg_inds = torch.nonzero(labels == 0).squeeze()
+        if pos_inds.numel() > 0:
+            bin_labels[pos_inds, -1] = labels[pos_inds]
+        if neg_inds.numel() > 0:
+            bin_labels[neg_inds, 0] = 1.0
+        return bin_labels
