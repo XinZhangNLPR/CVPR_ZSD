@@ -34,10 +34,10 @@ class ObjRPNHead(ObjAnchorHead):
         #normal_init(self.rpn_obj, std=0.01)
         
         normal_init(self.vec_fb)
-        with torch.no_grad():
-            self.vec_fb.weight.data[0] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
-            self.vec_fb.weight.data[2] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
-            self.vec_fb.weight.data[4] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
+        # with torch.no_grad():
+        #     self.vec_fb.weight.data[0] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
+        #     self.vec_fb.weight.data[2] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
+        #     self.vec_fb.weight.data[4] = self.vec_bg_weight.unsqueeze(-1).unsqueeze(-1)
 
     def forward_single(self, x):
         #import pdb;pdb.set_trace()

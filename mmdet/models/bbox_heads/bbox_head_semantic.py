@@ -113,11 +113,12 @@ class BBoxSemanticHead(nn.Module):
             else:
                 voc = None
             # vec = np.loadtxt('MSCOCO/word_w2v.txt', dtype='float32', delimiter=',')
-            vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')
+            import pdb;pdb.set_trace()
+            vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')[:,1:] # delete bg
             # if self.seen_class:
             vec = vec_load[:, :num_classes]
             # else:
-            vec_unseen = np.concatenate([vec_load[:, 0:1], vec_load[:, num_classes:]], axis=1)
+            vec_unseen = vec_load[:, num_classes:]#np.concatenate([vec_load[:, 0:1], vec_load[:, num_classes:]], axis=1)
             vec = torch.tensor(vec, dtype=torch.float32)
             if voc is not None:
                 voc = torch.tensor(voc, dtype=torch.float32)

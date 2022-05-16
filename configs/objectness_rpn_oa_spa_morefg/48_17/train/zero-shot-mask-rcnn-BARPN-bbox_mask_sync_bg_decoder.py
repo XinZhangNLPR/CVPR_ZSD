@@ -26,7 +26,7 @@ model = dict(
         target_stds=[1.0, 1.0, 1.0, 1.0],
         voc_path=None, ###
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
-        sync_bg=True,
+        sync_bg=False,
         objectness_type='superpixel',
         #loss_objectness=dict(type='L1Loss', loss_weight=1.0),        
         loss_cls=dict(
@@ -49,7 +49,7 @@ model = dict(
         reg_with_semantic=False,
         share_semantic=False,
         with_decoder=True,
-        sync_bg=True,
+        sync_bg=False,
         voc_path='data/coco/vocabulary_w2v.txt',
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
         target_means=[0., 0., 0., 0.],
@@ -86,8 +86,8 @@ model = dict(
         loss_ed=dict(type='MSELoss', loss_weight=0.5)),
     mask_with_decoder=True,
     bbox_with_decoder=True,
-    bbox_sync_bg=True,
-    mask_sync_bg=True)
+    bbox_sync_bg=False,
+    mask_sync_bg=False)
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
