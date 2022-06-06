@@ -1,6 +1,6 @@
 # model settings
 model = dict(
-    type='MaskRCNN',
+    type='ZeroShotMaskRCNN',
     pretrained='torchvision://resnet101',
     backbone=dict(
         type='ResNet',
@@ -15,14 +15,20 @@ model = dict(
         out_channels=256,
         num_outs=5),
     rpn_head=dict(
-        type='RPNHead',
+        type='ObjRPNHead',
         in_channels=256,
+        semantic_dims=300,
         feat_channels=256,
         anchor_scales=[8],
         anchor_ratios=[0.5, 1.0, 2.0],
         anchor_strides=[4, 8, 16, 32, 64],
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
+        voc_path=None, ###
+        vec_path='data/coco/word_w2v_withbg_48_17.txt',
+        sync_bg=False,
+        objectness_type='superpixel',
+        #loss_objectness=dict(type='L1Loss', loss_weight=1.0),        
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
@@ -32,44 +38,82 @@ model = dict(
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
     bbox_head=dict(
-        type='SharedFCBBoxHead',
+        type='SharedFCSemanticBBoxHead',
         num_fcs=2,
         in_channels=256,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=81,
+        num_classes=48,
+        semantic_dims=300,
+        seen_class=True,
+        reg_with_semantic=False,
+        share_semantic=False,
+        with_decoder=True,
+        sync_bg=False,
+        voc_path='data/coco/vocabulary_w2v.txt',
+        vec_path='data/coco/word_w2v_withbg_48_17.txt',
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=False,
-        loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
+        reg_ag_to_cs = False,
+        reg_double_fc = False,
+        reg_bn_sigmoid = False,
+        loss_semantic=dict(
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
+        loss_ed=dict(type='MSELoss', loss_weight=0.5)),
     mask_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=2),
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
     mask_head=dict(
-        type='FCNMaskHead',
+        type='SemanticFCNMaskHead',
         num_convs=4,
         in_channels=256,
         conv_out_channels=256,
-        num_classes=81,
+        num_classes=48,
+        gzsd=False,
+        semantic_dims=300,
+        seen_class=True,
+        share_semantic=False,
+        voc_path=None,
+        vec_path='data/coco/word_w2v_withbg_48_17.txt',
+        with_learnable_kernel=True,
+        with_decoder=True,
+        with_bg = False,
         loss_mask=dict(
-            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)))
+            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
+        loss_ed=dict(type='MSELoss', loss_weight=0.5)),
+    mask_with_decoder=True,
+    bbox_with_decoder=True,
+    bbox_sync_bg=False,
+    mask_sync_bg=False)
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
+        # assigner=dict(
+        #     type='MaxIoUAssigner',
+        #     pos_iou_thr=0.7,
+        #     neg_iou_thr=0.3,
+        #     min_pos_iou=0.3,
+        #     ignore_iof_thr=-1),
+        # sampler=dict(
+        #     type='RandomSampler',
+        #     num=256,
+        #     pos_fraction=0.5,
+        #     neg_pos_ub=-1,
+        #     add_gt_as_proposals=False),
         assigner=dict(
             type='MaxIoUAssigner',
-            pos_iou_thr=0.7,
-            neg_iou_thr=0.3,
+            pos_iou_thr=0.3,
+            neg_iou_thr=0.1,
             min_pos_iou=0.3,
             ignore_iof_thr=-1),
         sampler=dict(
             type='RandomSampler',
             num=256,
-            pos_fraction=0.5,
+            pos_fraction=1.0,
             neg_pos_ub=-1,
             add_gt_as_proposals=False),
         allowed_border=0,
@@ -112,7 +156,8 @@ test_cfg = dict(
         max_per_img=100,
         mask_thr_binary=0.5))
 # dataset settings
-dataset_type = 'CocoDataset'
+# dataset_type = 'CocoDatasetSeen48'
+dataset_type = 'CocoDatasetUnseen17'
 data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -146,21 +191,21 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        ann_file=data_root + 'annotations/instances_train2014_seen_48_17.json',
+        img_prefix=data_root + 'train2014/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/instances_val2014_seen_48_17.json',
+        img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/instances_val2014_unseen_48_17.json',
+        img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline))
 # optimizer
-optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -169,7 +214,7 @@ lr_config = dict(
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
     step=[8, 11])
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=12)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -178,11 +223,12 @@ log_config = dict(
         # dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
+evaluation = dict(interval=1)
 # runtime settings
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/mask_rcnn_r101_fpn_1x'
+work_dir = './work_dirs/objectness_rpn_oa_spa_morefg_8/48_17'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

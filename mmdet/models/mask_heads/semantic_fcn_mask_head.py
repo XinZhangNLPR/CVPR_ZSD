@@ -33,6 +33,7 @@ class SemanticFCNMaskHead(nn.Module):
                  vec_path=None,
                  with_learnable_kernel=True,
                  with_decoder=False,
+                 with_bg = True,
                  class_agnostic=False,
                  conv_cfg=None,
                  norm_cfg=None,
@@ -66,6 +67,8 @@ class SemanticFCNMaskHead(nn.Module):
         self.loss_mask = build_loss(loss_mask)
         self.loss_ed = build_loss(loss_ed)
         self.sync_bg=sync_bg
+
+        self.with_bg = with_bg
 
         self.convs = nn.ModuleList()
         for i in range(self.num_convs):
@@ -195,6 +198,7 @@ class SemanticFCNMaskHead(nn.Module):
                 conv4_x = self.relu(conv4_x)
 
         # encoder
+        #import pdb;pdb.set_trace()
         x = self.convT(conv4_x)
         if self.voc is not None:
             x = self.conv_voc(x)
@@ -234,6 +238,9 @@ class SemanticFCNMaskHead(nn.Module):
     @force_fp32(apply_to=('mask_pred', ))
     def loss(self, mask_pred, mask_targets, labels, conv4_x=None, d_x=None):
         loss = dict()
+        if not self.with_bg:
+            labels = labels-1
+        #import pdb;pdb.set_trace()
         if self.class_agnostic:
             loss_mask = self.loss_mask(mask_pred, mask_targets,
                                        torch.zeros_like(labels))

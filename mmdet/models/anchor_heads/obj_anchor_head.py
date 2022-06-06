@@ -97,18 +97,18 @@ class ObjAnchorHead(nn.Module):
 
         # feature   |   voc    | kernel_se| bg_vec(learning)
         # (1024*300)*(300*4071)*(4071*300)*(300*1) = (1024*1)
-        # if self.voc_path:
-        #     voc = np.loadtxt(self.voc_path, dtype='float32', delimiter=',')
-        # else:
-        #     voc = None
+        if self.voc_path:
+            voc = np.loadtxt(self.voc_path, dtype='float32', delimiter=',')
+        else:
+            voc = None
         # vec_load = np.loadtxt(self.vec_path, dtype='float32', delimiter=',')
         # vec_seen = vec_load[:, :self.num_classes]
         # # 300*4071
-        # if voc:
-        #     self.voc = torch.tensor(voc, dtype=torch.float32).cuda()
-        #     self.voc_conv = nn.Conv2d(self.semantic_dims * self.num_anchors, self.vec.shape[0], 1)
-        # else:
-        #     self.voc = None
+        if voc:
+            self.voc = torch.tensor(voc, dtype=torch.float32).cuda()
+            self.voc_conv = nn.Conv2d(self.semantic_dims * self.num_anchors, self.vec.shape[0], 1)
+        else:
+            self.voc = None
         # self.vec_seen = torch.tensor(vec_seen, dtype=torch.float32)
         # # 300*1
         # self.vec_bg_weight = self.vec_seen[:, 0]

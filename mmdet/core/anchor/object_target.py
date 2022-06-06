@@ -187,6 +187,8 @@ def object_target_single(flat_anchors,
         else:
             label_weights[pos_inds] = cfg.pos_weight
 
+    #import pdb;pdb.set_trace()
+
 
 
     if len(neg_inds) > 0:

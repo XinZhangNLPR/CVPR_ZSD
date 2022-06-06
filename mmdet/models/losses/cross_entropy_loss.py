@@ -39,13 +39,14 @@ def binary_cross_entropy(pred,
                          avg_factor=None):
     if pred.dim() != label.dim():
         label, weight = _expand_binary_labels(label, weight, pred.size(-1))
+    #import pdb;pdb.set_trace()
 
     # weighted element-wise losses
+    
     if weight is not None:
         weight = weight.float()
-    import pdb;pdb.set_trace()
-    loss = F.binary_cross_entropy_with_logits(
-        pred, label.float(), weight, reduction='none')
+    #import pdb;pdb.set_trace()
+    loss = F.binary_cross_entropy_with_logits(pred, label.float(), weight, reduction='none')
     # do the reduction for the weighted loss
     loss = weight_reduce_loss(loss, reduction=reduction, avg_factor=avg_factor)
 

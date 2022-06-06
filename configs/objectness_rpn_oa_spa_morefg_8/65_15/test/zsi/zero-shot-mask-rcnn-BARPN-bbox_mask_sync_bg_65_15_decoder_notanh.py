@@ -1,10 +1,10 @@
 # model settings
 model = dict(
-    type='MaskRCNN',
-    pretrained='torchvision://resnet50',
+    type='ZeroShotMaskRCNN',
+    pretrained='torchvision://resnet101',
     backbone=dict(
         type='ResNet',
-        depth=50,
+        depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -15,16 +15,20 @@ model = dict(
         out_channels=256,
         num_outs=5),
     rpn_head=dict(
-        type='RPNHead',
+        type='BackgroundAwareRPNHead',
         in_channels=256,
+        semantic_dims=300,
         feat_channels=256,
         anchor_scales=[8],
         anchor_ratios=[0.5, 1.0, 2.0],
         anchor_strides=[4, 8, 16, 32, 64],
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
+        voc_path=None,
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
+        sync_bg=True,
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
@@ -32,16 +36,24 @@ model = dict(
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
     bbox_head=dict(
-        type='SharedFCBBoxHead',
+        type='SharedFCSemanticBBoxHead',
         num_fcs=2,
         in_channels=256,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=81,
+        num_classes=66,
+        semantic_dims=300,
+        seen_class=False,
+        reg_with_semantic=False,
+        share_semantic=False,
+        with_decoder=True,
+        sync_bg=True,
+        voc_path='data/coco/vocabulary_w2v.txt',
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=False,
-        loss_cls=dict(
+        loss_semantic=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
     mask_roi_extractor=dict(
@@ -50,13 +62,27 @@ model = dict(
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
     mask_head=dict(
-        type='FCNMaskHead',
+        type='SemanticFCNMaskHead',
         num_convs=4,
         in_channels=256,
         conv_out_channels=256,
-        num_classes=81,
+        num_classes=66,
+        gzsd=False,
+        semantic_dims=300,
+        seen_class=False,
+        sync_bg=True,
+        share_semantic=False,
+        voc_path=None,
+        vec_path='data/coco/word_w2v_withbg_65_15.txt',
+        with_learnable_kernel=True,
+        with_decoder=True,
         loss_mask=dict(
-            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)))
+            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
+        loss_ed=dict(type='MSELoss', loss_weight=0.5)),
+    mask_with_decoder=True,
+    bbox_with_decoder=True,
+    bbox_sync_bg=True,
+    mask_sync_bg=True)
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
@@ -112,7 +138,7 @@ test_cfg = dict(
         max_per_img=100,
         mask_thr_binary=0.5))
 # dataset settings
-dataset_type = 'CocoDataset'
+dataset_type = 'CocoDatasetUnseen15'
 data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -146,30 +172,30 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        ann_file=data_root + 'annotations/instances_train2014_seen_65_15.json',
+        img_prefix=data_root + 'train2014/',
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/instances_val2014_seen_65_15.json',
+        img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'annotations/instances_val2014_unseen_65_15.json',
+        img_prefix=data_root + 'val2014/',
         pipeline=test_pipeline))
 # optimizer
-optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0075, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=7000,
     warmup_ratio=1.0 / 3,
     step=[8, 11])
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=12)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -183,7 +209,7 @@ evaluation = dict(interval=1)
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/mask_rcnn_r50_fpn_1x'
+work_dir = './work_dirs/zsi/65_15/'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

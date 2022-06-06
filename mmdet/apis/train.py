@@ -26,6 +26,7 @@ def parse_losses(losses):
                 '{} is not a tensor or list of tensors'.format(loss_name))
 
     loss = sum(_value for _key, _value in log_vars.items() if 'loss' in _key)
+    #import pdb;pdb.set_trace()
 
     log_vars['loss'] = loss
     for name in log_vars:

@@ -82,8 +82,11 @@ class ObjRPNHead(ObjAnchorHead):
 
         #import pdb;pdb.set_trace()
            
-        labels = labels.reshape(-1)
-        label_weights = label_weights.reshape(-1)
+        labels = labels.reshape(-1, self.cls_out_channels)
+        if self.use_sigmoid_cls:
+            label_weights = label_weights.reshape(-1, self.cls_out_channels)
+        else:
+            label_weights = label_weights.reshape(-1)
         cls_score = cls_score.permute(0, 2, 3,
                                       1).reshape(-1, self.cls_out_channels)
         loss_cls = self.loss_cls(
@@ -103,25 +106,6 @@ class ObjRPNHead(ObjAnchorHead):
         return loss_cls, loss_bbox
 
 
-    # def loss(self,
-    #          cls_scores,
-    #          bbox_preds,
-    #          objectness_score,
-    #          gt_bboxes,
-    #          img_metas,
-    #          cfg,
-    #          gt_bboxes_ignore=None):
-    #     losses = super(ObjRPNHead, self).loss(
-    #         cls_scores,
-    #         bbox_preds,
-    #         objectness_score,
-    #         gt_bboxes,
-    #         None,
-    #         img_metas,
-    #         cfg,
-    #         gt_bboxes_ignore=gt_bboxes_ignore)
-    #     return dict(
-    #         loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'],loss_rpn_obj=losses['loss_rpn_obj'])
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds'))
     def loss(self,
@@ -158,6 +142,7 @@ class ObjRPNHead(ObjAnchorHead):
             objectness_type = self.objectness_type)
         if cls_reg_obj_targets is None:
             return None
+        #import pdb;pdb.set_trace()
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_obj_targets
         num_total_samples = (

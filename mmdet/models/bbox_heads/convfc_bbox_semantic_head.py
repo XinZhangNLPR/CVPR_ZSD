@@ -276,7 +276,7 @@ class ConvFCSemanticBBoxHead(BBoxSemanticHead):
                 semantic_score = torch.mm(semantic_feature, semantic_score)
         else:
             semantic_score = None
-        # import pdb;pdb.set_trace()
+        #import pdb;pdb.set_trace()
         if self.with_reg and not self.reg_with_semantic:
             if self.reg_ag_to_cs:
                 #import pdb;pdb.set_trace()

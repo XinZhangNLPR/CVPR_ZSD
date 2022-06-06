@@ -12,11 +12,13 @@ from .lsoftmax import LSoftmaxLinear
 from .center_loss import CenterLoss
 from .listMLE import ListMLELoss
 from .pairank import PaiRankLoss
+from .varifocal_loss import VarifocalLoss
+
 __all__ = [
     'accuracy', 'Accuracy', 'cross_entropy', 'binary_cross_entropy', 'L1Loss',
     'l1_loss', 'mask_cross_entropy', 'CrossEntropyLoss', 'sigmoid_focal_loss',
     'FocalLoss', 'smooth_l1_loss', 'SmoothL1Loss', 'balanced_l1_loss', 'BCELoss',
     'BalancedL1Loss', 'mse_loss', 'MSELoss', 'iou_loss', 'bounded_iou_loss',
     'IoULoss', 'BoundedIoULoss', 'GHMC', 'GHMR', 'reduce_loss',
-    'weight_reduce_loss', 'weighted_loss', 'LSoftmaxLinear', 'CenterLoss','ListMLELoss','PaiRankLoss'
+    'weight_reduce_loss', 'weighted_loss', 'LSoftmaxLinear', 'CenterLoss','ListMLELoss','PaiRankLoss','VarifocalLoss'
 ]

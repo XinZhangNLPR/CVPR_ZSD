@@ -37,11 +37,11 @@ model = dict(
         # ),        
         voc_path=None,
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
-        sync_bg=True,
+        sync_bg=False,
         objectness_type='superpixel',
-        loss_objectness=dict(type='L1Loss', loss_weight=1.0),      
+        #loss_objectness=dict(type='L1Loss', loss_weight=1.0),      
         loss_cls=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
@@ -54,13 +54,13 @@ model = dict(
         in_channels=256,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=49,
+        num_classes=48,
         semantic_dims=300,
         seen_class=False,
         reg_with_semantic=False,
         share_semantic=False,
         with_decoder=True,
-        sync_bg=True,
+        sync_bg=False,
         voc_path='data/coco/vocabulary_w2v.txt',
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
         target_means=[0., 0., 0., 0.],
@@ -70,7 +70,7 @@ model = dict(
         reg_double_fc = False,
         reg_bn_sigmoid = False,
         loss_semantic=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
         loss_ed=dict(type='MSELoss', loss_weight=0.5)),
     mask_roi_extractor=dict(
@@ -83,7 +83,7 @@ model = dict(
         num_convs=4,
         in_channels=256,
         conv_out_channels=256,
-        num_classes=49,
+        num_classes=48,
         gzsd=False,
         semantic_dims=300,
         seen_class=False,
@@ -97,21 +97,33 @@ model = dict(
         loss_ed=dict(type='MSELoss', loss_weight=0.5)),
     mask_with_decoder=True,
     bbox_with_decoder=True,
-    bbox_sync_bg=True,
-    mask_sync_bg=True)
+    bbox_sync_bg=False,
+    mask_sync_bg=False)
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
+        # assigner=dict(
+        #     type='MaxIoUAssigner',
+        #     pos_iou_thr=0.7,
+        #     neg_iou_thr=0.3,
+        #     min_pos_iou=0.3,
+        #     ignore_iof_thr=-1),
+        # sampler=dict(
+        #     type='RandomSampler',
+        #     num=256,
+        #     pos_fraction=0.5,
+        #     neg_pos_ub=-1,
+        #     add_gt_as_proposals=False),
         assigner=dict(
             type='MaxIoUAssigner',
-            pos_iou_thr=0.7,
-            neg_iou_thr=0.3,
+            pos_iou_thr=0.3,
+            neg_iou_thr=0.1,
             min_pos_iou=0.3,
             ignore_iof_thr=-1),
         sampler=dict(
             type='RandomSampler',
             num=256,
-            pos_fraction=0.5,
+            pos_fraction=1.0,
             neg_pos_ub=-1,
             add_gt_as_proposals=False),
         allowed_border=0,

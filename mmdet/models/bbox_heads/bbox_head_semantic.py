@@ -73,6 +73,7 @@ class BBoxSemanticHead(nn.Module):
         self.num_classes = num_classes
         self.target_means = target_means
         self.target_stds = target_stds
+        self.use_sigmoid_cls = loss_semantic.get('use_sigmoid', False)
         
         self.reg_class_agnostic = reg_class_agnostic
         self.reg_ag_to_cs = reg_ag_to_cs
@@ -113,7 +114,7 @@ class BBoxSemanticHead(nn.Module):
             else:
                 voc = None
             # vec = np.loadtxt('MSCOCO/word_w2v.txt', dtype='float32', delimiter=',')
-            import pdb;pdb.set_trace()
+            #import pdb;pdb.set_trace()
             vec_load = np.loadtxt(vec_path, dtype='float32', delimiter=',')[:,1:] # delete bg
             # if self.seen_class:
             vec = vec_load[:, :num_classes]
@@ -236,6 +237,7 @@ class BBoxSemanticHead(nn.Module):
         losses = dict()
         #import pdb;pdb.set_trace()
         
+        
         if self.loss_rank:
             #import pdb;pdb.set_trace()
             # fg_semantic_score = semantic_score[labels!=0]
@@ -250,20 +252,21 @@ class BBoxSemanticHead(nn.Module):
                 label_weights,
                 avg_factor=avg_factor,
                 reduction_override=reduction_override)
-            losses['acc'] = accuracy(semantic_score, labels)
+            if not self.use_sigmoid_cls:
+                losses['acc'] = accuracy(semantic_score, labels)
         if bbox_pred is not None:
             pos_inds = labels > 0
             if self.reg_class_agnostic:
                 pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), 4)[pos_inds]
             else:
-                pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1,
-                                               4)[pos_inds, labels[pos_inds]]
+                pos_bbox_pred = bbox_pred.view(bbox_pred.size(0), -1, 4)[pos_inds, labels[pos_inds]-1]
             losses['loss_bbox'] = self.loss_bbox(
                 pos_bbox_pred,
                 bbox_targets[pos_inds],
                 bbox_weights[pos_inds],
                 avg_factor=bbox_targets.size(0),
                 reduction_override=reduction_override)
+            #print(losses['loss_bbox'])
         if self.with_decoder and x_semantic is not None and d_feature is not None:
             loss_encoder_decoder = self.loss_ed(x_semantic, d_feature)
             losses['bbox_loss_ed'] = loss_encoder_decoder
@@ -279,9 +282,13 @@ class BBoxSemanticHead(nn.Module):
                        scale_factor,
                        rescale=False,
                        cfg=None):
+        import pdb;pdb.set_trace()
         if isinstance(semantic_score, list):
             semantic_score = sum(semantic_score) / float(len(semantic_score))
-        scores = F.softmax(semantic_score, dim=1) if semantic_score is not None else None
+        if self.use_sigmoid_cls:
+            scores = F.sigmoid(semantic_score) if semantic_score is not None else None
+        else:
+            scores = F.softmax(semantic_score, dim=1) if semantic_score is not None else None
         # scores = LSoftmaxLinear(semantic_score, dim=1) if semantic_score is not None else None
 
         if self.gzsd:

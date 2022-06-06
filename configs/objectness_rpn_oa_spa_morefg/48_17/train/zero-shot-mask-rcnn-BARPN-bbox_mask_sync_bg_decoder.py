@@ -30,7 +30,7 @@ model = dict(
         objectness_type='superpixel',
         #loss_objectness=dict(type='L1Loss', loss_weight=1.0),        
         loss_cls=dict(
-            type='BCELoss', use_sigmoid=True,loss_weight=1.0),
+            type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
@@ -81,6 +81,7 @@ model = dict(
         vec_path='data/coco/word_w2v_withbg_48_17.txt',
         with_learnable_kernel=True,
         with_decoder=True,
+        with_bg = False,
         loss_mask=dict(
             type='CrossEntropyLoss', use_mask=True, loss_weight=1.0),
         loss_ed=dict(type='MSELoss', loss_weight=0.5)),
